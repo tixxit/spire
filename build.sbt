@@ -1,3 +1,5 @@
+import com.typesafe.sbt.SbtGhPages.GhPagesKeys._
+import scala.language.existentials
 import sbtbuildinfo.Plugin._
 import sbtunidoc.{Plugin => UnidocPlugin}
 import sbtunidoc.Plugin.UnidocKeys._
@@ -10,7 +12,6 @@ import ScoverageSbtPlugin._
 lazy val spire = project.in(file("."))
   .settings(moduleName := "spire-root")
   .settings(spireSettings)
-  .settings(unidocSettings)
   .settings(noPublishSettings)
   .aggregate(spireJVM, spireJS)
   .dependsOn(spireJVM, spireJS)
@@ -18,7 +19,6 @@ lazy val spire = project.in(file("."))
 lazy val spireJVM = project.in(file(".spireJVM"))
   .settings(moduleName := "spire-aggregate")
   .settings(spireSettings)
-  .settings(unidocSettings)
   .settings(noPublishSettings)
   .aggregate(macrosJVM, coreJVM, extrasJVM, examples, lawsJVM, testsJVM, benchmark)
   .dependsOn(macrosJVM, coreJVM, extrasJVM, examples, lawsJVM, testsJVM, benchmark)
@@ -26,7 +26,6 @@ lazy val spireJVM = project.in(file(".spireJVM"))
 lazy val spireJS = project.in(file(".spireJS"))
   .settings(moduleName := "spire-aggregate")
   .settings(spireSettings)
-  .settings(unidocSettings)
   .settings(noPublishSettings)
   .aggregate(macrosJS, coreJS, extrasJS, lawsJS, testsJS)
   .dependsOn(macrosJS, coreJS, extrasJS, lawsJS, testsJS)
@@ -101,7 +100,12 @@ lazy val docs = project.in(file("docs"))
   .settings(moduleName := "spire-docs")
   .settings(spireSettings)
   .settings(docsSettings)
+  .settings(unidocSettings)
+  .settings(noPublishSettings)
+  .settings(ghpages.settings)
   .dependsOn(coreJVM, extrasJVM)
+
+lazy val docsMappingsAPIDir = settingKey[String]("Name of subdirectory in site target directory for api docs")
 
 lazy val docsSettings = Seq(
   micrositeName := "Spire",
@@ -109,14 +113,27 @@ lazy val docsSettings = Seq(
   micrositeAuthor := "it's many amazing contributors",
   micrositeHomepage := "authors.html",
   micrositeBaseUrl := "spire",
-  /* micrositeDocumentationUrl := "api", */
+  micrositeDocumentationUrl := "api",
   micrositeGithubOwner := "non",
   micrositeGithubRepo := "spire",
   micrositeExtraMdFiles := Map(
     file("AUTHORS.md") -> "authors.md",
     file("CONTRIBUTING.md") -> "contributing.md"
   ),
-  fork in tut := true
+  autoAPIMappings := true,
+  docsMappingsAPIDir := "api",
+  unidocProjectFilter in (ScalaUnidoc, unidoc) := inProjects(coreJVM, extrasJVM),
+  ghpagesNoJekyll := false,
+  addMappingsToSiteDir(mappings in (ScalaUnidoc, packageDoc), docsMappingsAPIDir),
+  fork in (ScalaUnidoc, unidoc) := true,
+  fork in tut := true,
+  scalacOptions in (ScalaUnidoc, unidoc) ++= Seq(
+    "-doc-source-url", "https://github.com/non/spire/tree/master€{FILE_PATH}.scala",
+    "-sourcepath", baseDirectory.in(LocalRootProject).value.getAbsolutePath,
+    "-diagrams"
+  ),
+  git.remoteRepo := "git@github.com:non/spire.git",
+  includeFilter in makeSite := "*.html" | "*.css" | "*.png" | "*.jpg" | "*.gif" | "*.js" | "*.swf" | "*.yml" | "*.md"
 )
 
 // Todo: As all tests in this list are commented out, no tests in testJS are run - but they are compiled.
@@ -179,7 +196,7 @@ lazy val jsTests = List(
   "spire.math.UShortTest",
   "spire.math.prime.FactorHeapCheck",
   "spire.math.prime.FactorsCheck",
-  "spire.random.GaussianTest",      
+  "spire.random.GaussianTest",
   "spire.random.GeneratorTest",
   "spire.random.SamplingTest",
   "spire.random.ShufflingTest",
@@ -235,7 +252,7 @@ lazy val buildSettings = Seq(
 
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions.diff(Seq(
-    "-Xfatal-warnings", 
+    "-Xfatal-warnings",
     "-language:existentials",
     "-Ywarn-dead-code",
     "-Ywarn-numeric-widen",
@@ -353,9 +370,9 @@ lazy val unidocSettings = UnidocPlugin.unidocSettings ++ Seq(
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Base Build Settings - Should not need to edit below this line. 
+// Base Build Settings - Should not need to edit below this line.
 // These settings could also come from another file or a plugin.
-// The only issue if coming from a plugin is that the Macro lib versions 
+// The only issue if coming from a plugin is that the Macro lib versions
 // are hard coded, so an overided facility would be required.
 
 addCommandAlias("gitSnapshots", ";set version in ThisBuild := git.gitDescribedVersion.value.get + \"-SNAPSHOT\"")
@@ -430,7 +447,7 @@ lazy val sharedPublishSettings = Seq(
       Some("Releases" at nexus + "service/local/staging/deploy/maven2")
   }
 )
- 
+
 lazy val sharedReleaseProcess = Seq(
   releaseProcess := Seq[ReleaseStep](
     checkSnapshotDependencies,
